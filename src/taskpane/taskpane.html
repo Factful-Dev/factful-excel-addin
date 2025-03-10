@@ -30,35 +30,27 @@
         </section>
 
         <main id="app-body" class="ms-welcome__main" style="display: none; color: white;">
-            <h2 class="ms-font-xl"> Discover what Office Add-ins can do for you today! </h2>
-
-            <ul class="ms-List ms-welcome__features">
+            <div class="ms-List ms-welcome__features">
                 <li class="ms-ListItem">
-                    <i class="ms-Icon ms-Icon--Ribbon ms-font-xl"></i>
+                    <span class="ms-font-xl">PDF to Excel converter</span>
 
-                    <span class="ms-font-m">Achieve more with Office integration</span>
+                    <input type="file">
+
+                    <button id="convert" class="ms-Button ms-Button--primary">
+                        <span class="ms-Button-label">Convert</span>
+                    </button>
                 </li>
                 <li class="ms-ListItem">
-                    <i class="ms-Icon ms-Icon--Unlock ms-font-xl"></i>
+                    <span class="ms-font-xl">Webscraper</span>
 
-                    <span class="ms-font-m">Unlock features and functionality</span>
+                    <label for="name">Enter your query:</label>
+                    <input type="text" id="name">
+
+                    <button id="webscrape" class="ms-Button ms-Button--primary">
+                        <span class="ms-Button-label">Run</span>
+                    </button>
                 </li>
-                <li class="ms-ListItem">
-                    <i class="ms-Icon ms-Icon--Design ms-font-xl"></i>
-
-                    <span class="ms-font-m">Create and visualize like a pro</span>
-                </li>
-            </ul>
-
-            <p class="ms-font-l">Modify the source files, then click <b>Run</b>.</p>
-
-            <div role="button" id="run" class="ms-welcome__action ms-Button ms-Button--hero ms-font-xl">
-                <span class="ms-Button-label">Run</span>
             </div>
-
-            <p>
-                <label id="item-subject"></label>
-            </p>
         </main>
     </body>
 </html>
