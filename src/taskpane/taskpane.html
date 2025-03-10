@@ -30,11 +30,13 @@
         </section>
 
         <main id="app-body" class="ms-welcome__main" style="display: none; color: white;">
+            <span class="ms-font-md" id="message" style="color: red;margin-top: 15px;"></span>
+
             <div class="ms-List ms-welcome__features">
                 <li class="ms-ListItem">
                     <span class="ms-font-xl">PDF to Excel converter</span>
 
-                    <input type="file">
+                    <input type="file" id="file-input" accept=".pdf" multiple="false">
 
                     <button id="convert" class="ms-Button ms-Button--primary">
                         <span class="ms-Button-label">Convert</span>

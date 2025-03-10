@@ -11,15 +11,16 @@ Office.onReady((info) => {
     document.getElementById("app-body").style.display = "flex";
 
     document.getElementById("webscrape").onclick = webscrape;
+    document.getElementById("convert").onclick = convertToExcel;
   }
 });
 
 export async function webscrape() {
   try {
     await Excel.run(async (context) => {
+      /*
       const sheet = context.workbook.worksheets.getActiveWorksheet();
       
-      /*
       const data = [
           ["Name", "Age", "City"],
           ["Alice", 25, "New York"],
@@ -51,4 +52,55 @@ export async function webscrape() {
   } catch (error) {
     console.error(error);
   }
+}
+
+export async function convertToExcel() {
+  try {
+    await Excel.run(async (context) => {
+      const fileInput = document.getElementById("file-input") as HTMLInputElement;
+
+      if (fileInput && fileInput.files.length > 0) {
+        const file = fileInput.files[0];
+
+        if (file.type === "application/pdf") {
+          const formData = new FormData();
+          formData.append("file", file);
+
+          const response = await fetch("https://enterprise.factful.io/api/convert-to-excel", {
+            method: "POST",
+            body: formData
+          });
+
+          if (response.ok) {
+            const responseData = await response.json();
+
+          } else {
+            displayMessage("Failed to convert the file");
+          }
+        } else {
+          displayMessage("Please select a PDF file.");
+        }
+      } else {
+        displayMessage("No file selected");
+      }
+
+      await context.sync();
+    });
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+export async function displayMessage(message: string) {
+  try {
+    await Excel.run(async (context) => {
+      const messageDisplay = document.getElementById("message");
+
+      messageDisplay.innerText = message;
+
+      await context.sync();
+    });
+  } catch (error) {
+    console.error(error);
+  } 
 }
