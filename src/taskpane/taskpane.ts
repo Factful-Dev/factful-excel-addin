@@ -70,6 +70,10 @@ export async function convertToExcel() {
 
           displayMessage(blobUrl);
 
+          setTimeout(() => {
+            URL.revokeObjectURL(blobUrl);
+          }, 60 * 1000);
+
           const response = await fetch("https://enterprise.factful.io/api/convert-to-excel", {
             method: "POST",
             body: formData
