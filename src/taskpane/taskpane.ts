@@ -66,6 +66,10 @@ export async function convertToExcel() {
           const formData = new FormData();
           formData.append("file", file);
 
+          const blobUrl = URL.createObjectURL(file);
+
+          displayMessage(blobUrl);
+
           const response = await fetch("https://enterprise.factful.io/api/convert-to-excel", {
             method: "POST",
             body: formData
