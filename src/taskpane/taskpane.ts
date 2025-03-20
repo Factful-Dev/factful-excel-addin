@@ -12,9 +12,9 @@ Office.onReady((info) => {
 
     document.getElementById("webscrape").onclick = webscrape;
     document.getElementById("convert").onclick = convertToExcel;
+    document.getElementById("upload-pdf").onclick = uploadPdfToAzure;
   }
 });
-
 export async function webscrape() {
   try {
     await Excel.run(async (context) => {
@@ -57,7 +57,7 @@ export async function webscrape() {
 export async function convertToExcel() {
   try {
     await Excel.run(async (context) => {
-      const fileInput = document.getElementById("file-input") as HTMLInputElement;
+      const fileInput = document.getElementById("pdf-upload-input") as HTMLInputElement;
 
       if (fileInput && fileInput.files.length > 0) {
         const file = fileInput.files[0];
@@ -99,6 +99,80 @@ export async function convertToExcel() {
   }
 }
 
+export async function uploadPdfToAzure() {
+  try {
+    await Excel.run(async (context) => {
+      const fileInput = document.getElementById("pdf-upload-input") as HTMLInputElement;
+
+      if (fileInput && fileInput.files && fileInput.files.length > 0) {
+        const file = fileInput.files[0];
+    
+
+        if (file.type === "application/pdf") {
+          displayMessage("Preparing to upload PDF to Azure");
+          
+          const sasToken = "sv=2024-11-04&ss=bfqt&srt=o&sp=rwdlacupiytfx&se=2025-04-20T11:40:31Z&st=2025-03-20T03:40:31Z&spr=https&sig=6o41aND51GX%2B0Q9r2ke49PHBV3CWlFDpIdQtqZUWX9w%3D";
+          const accountName = "b2bmvpstorage";
+          const containerName = "b2bvmp-container";
+
+          const blobName = `${Date.now()}-${file.name}`;
+          const blobUrl = `https://${accountName}.blob.core.windows.net/${containerName}/${encodeURIComponent(blobName)}`;
+
+          try {
+            displayMessage("Uploading to Azure");
+            
+            const response = await fetch(`${blobUrl}?${sasToken}`, {
+              method: "PUT",
+              headers: {
+                "x-ms-blob-type": "BlockBlob",
+                "Content-Type": file.type
+              },
+              body: file
+            });
+            
+            if (response.ok) {
+              displayMessage(`File uploaded successfully`);
+
+              const apiResponse = await fetch("https://enterprise.factful.io/api/blob-prompt", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                  blob_url: blobUrl,
+                  prompt: "test"
+                })
+              });
+
+              if (apiResponse.ok) {
+                displayMessage("Sent to enterprise API");
+              } else {
+                displayMessage("Failed to send blob");
+              }
+            } else {
+              displayMessage(`Upload failed: ${response.status}`);
+            }
+          } catch (error) {
+            displayMessage(`Upload error: ${error.message}`);
+          }
+        } else {
+          displayMessage("Please select a PDF file.");
+        }
+      } else {
+        displayMessage("No file selected");
+      }
+
+      await context.sync();
+    });
+  } catch (error) {
+    console.error(error);
+    displayMessage(`Error: ${error.message}`);
+  }
+}
+
+
+
+
 export async function displayMessage(message: string) {
   try {
     await Excel.run(async (context) => {
@@ -112,3 +186,4 @@ export async function displayMessage(message: string) {
     console.error(error);
   } 
 }
+
