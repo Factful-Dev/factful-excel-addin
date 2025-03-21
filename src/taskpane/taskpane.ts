@@ -12,7 +12,6 @@ Office.onReady((info) => {
 
     document.getElementById("webscrape").onclick = webscrape;
     document.getElementById("convert").onclick = convertToExcel;
-    document.getElementById("upload-pdf").onclick = uploadPdfToAzure;
   }
 });
 export async function webscrape() {
@@ -57,59 +56,13 @@ export async function webscrape() {
 export async function convertToExcel() {
   try {
     await Excel.run(async (context) => {
-      const fileInput = document.getElementById("pdf-upload-input") as HTMLInputElement;
+      const fileInput = document.getElementById("file-input") as HTMLInputElement;
 
       if (fileInput && fileInput.files.length > 0) {
         const file = fileInput.files[0];
 
         if (file.type === "application/pdf") {
-          const formData = new FormData();
-          formData.append("file", file);
-
-          const blobUrl = URL.createObjectURL(file);
-
-          displayMessage(blobUrl);
-
-          setTimeout(() => {
-            URL.revokeObjectURL(blobUrl);
-          }, 60 * 1000);
-
-          const response = await fetch("https://enterprise.factful.io/api/convert-to-excel", {
-            method: "POST",
-            body: formData
-          });
-
-          if (response.ok) {
-            const responseData = await response.json();
-
-          } else {
-            displayMessage("Failed to convert the file");
-          }
-        } else {
-          displayMessage("Please select a PDF file.");
-        }
-      } else {
-        displayMessage("No file selected");
-      }
-
-      await context.sync();
-    });
-  } catch (error) {
-    console.error(error);
-  }
-}
-
-export async function uploadPdfToAzure() {
-  try {
-    await Excel.run(async (context) => {
-      const fileInput = document.getElementById("pdf-upload-input") as HTMLInputElement;
-
-      if (fileInput && fileInput.files && fileInput.files.length > 0) {
-        const file = fileInput.files[0];
-    
-
-        if (file.type === "application/pdf") {
-          displayMessage("Preparing to upload PDF to Azure");
+          displayMessage("Uploading PDF for conversion...");
           
           const sasToken = "sv=2024-11-04&ss=bfqt&srt=o&sp=rwdlacupiytfx&se=2025-04-20T11:40:31Z&st=2025-03-20T03:40:31Z&spr=https&sig=6o41aND51GX%2B0Q9r2ke49PHBV3CWlFDpIdQtqZUWX9w%3D";
           const accountName = "b2bmvpstorage";
@@ -119,9 +72,7 @@ export async function uploadPdfToAzure() {
           const blobUrl = `https://${accountName}.blob.core.windows.net/${containerName}/${encodeURIComponent(blobName)}`;
 
           try {
-            displayMessage("Uploading to Azure");
-            
-            const response = await fetch(`${blobUrl}?${sasToken}`, {
+            const uploadResponse = await fetch(`${blobUrl}?${sasToken}`, {
               method: "PUT",
               headers: {
                 "x-ms-blob-type": "BlockBlob",
@@ -130,30 +81,40 @@ export async function uploadPdfToAzure() {
               body: file
             });
             
-            if (response.ok) {
-              displayMessage(`File uploaded successfully`);
+            if (uploadResponse.ok) {
+              displayMessage("PDF uploaded successfully, converting to Excel...");
 
-              const apiResponse = await fetch("https://enterprise.factful.io/api/blob-prompt", {
+              const promptInput = document.getElementById("name") as HTMLInputElement;
+              const prompt = promptInput && promptInput.value ? promptInput.value : "Extract all tables from the PDF and create an Excel spreadsheet";
+
+              const apiResponse = await fetch("https://enterprise.factful.io/api/convert-to-excel", {
                 method: "POST",
                 headers: {
                   "Content-Type": "application/json"
                 },
                 body: JSON.stringify({
                   blob_url: blobUrl,
-                  prompt: "test"
+                  prompt: prompt
                 })
               });
 
               if (apiResponse.ok) {
-                displayMessage("Sent to enterprise API");
+                const responseData = await apiResponse.json();
+                
+                if (responseData.data && Array.isArray(responseData.data)) {
+                  await insertDataAndCreateChart(context, responseData.data);
+                  displayMessage("PDF converted successfully and data inserted into Excel!");
+                } else {
+                  displayMessage("Failed to extract structured data from the PDF");
+                }
               } else {
-                displayMessage("Failed to send blob");
+                displayMessage("Failed to convert PDF to Excel");
               }
             } else {
-              displayMessage(`Upload failed: ${response.status}`);
+              displayMessage(`Upload failed: ${uploadResponse.status}`);
             }
           } catch (error) {
-            displayMessage(`Upload error: ${error.message}`);
+            displayMessage(`Error: ${error.message}`);
           }
         } else {
           displayMessage("Please select a PDF file.");
@@ -168,6 +129,103 @@ export async function uploadPdfToAzure() {
     console.error(error);
     displayMessage(`Error: ${error.message}`);
   }
+}
+
+function convertToTabularData(data: any): any[][] {
+  if (Array.isArray(data)) {
+    if (Array.isArray(data[0])) {
+      return data;
+    } else if (typeof data[0] === 'object') {
+      const headers = Object.keys(data[0]);
+      const result = [headers];
+      
+      data.forEach(item => {
+        const row = headers.map(header => item[header] || '');
+        result.push(row);
+      });
+      
+      return result;
+    }
+  } else if (typeof data === 'object') {
+    const result = [['Key', 'Value']];
+    
+    Object.entries(data).forEach(([key, value]) => {
+      result.push([key, String(value)]);
+    });
+    
+    return result;
+  }
+  
+  return [];
+}
+
+async function insertDataAndCreateChart(context: Excel.RequestContext, data: any[][]) {
+  const sheet = context.workbook.worksheets.getActiveWorksheet();
+
+  sheet.getUsedRange()?.clear();
+  
+  const range = sheet.getRange("A1").getResizedRange(data.length - 1, data[0].length - 1);
+  range.values = data;
+  
+  const table = sheet.tables.add(range, true);
+  table.name = "ExtractedDataTable";
+  
+
+  table.getHeaderRowRange().format.fill.color = "#4472C4";
+  table.getHeaderRowRange().format.font.color = "white";
+  table.getHeaderRowRange().format.font.bold = true;
+  
+  range.format.autofitColumns();
+  range.format.autofitRows();
+
+  let canCreateChart = false;
+  let numericColumns = [];
+  
+  if (data.length > 1) {
+    for (let colIndex = 0; colIndex < data[0].length; colIndex++) {
+      let isNumeric = true;
+      
+      for (let rowIndex = 1; rowIndex < data.length; rowIndex++) {
+        const cellValue = data[rowIndex][colIndex];
+        
+        if (isNaN(Number(cellValue)) || cellValue === '' || cellValue === null) {
+          isNumeric = false;
+          break;
+        }
+      }
+      
+      if (isNumeric) {
+        numericColumns.push(colIndex);
+      }
+    }
+  
+    if (numericColumns.length > 0) {
+      canCreateChart = true;
+    }
+  }
+
+  if (canCreateChart) {
+    let chartType: Excel.ChartType;
+    
+    if (numericColumns.length === 1) {
+      chartType = Excel.ChartType.columnClustered;
+    } else {
+      chartType = Excel.ChartType.line;
+    }
+  
+    const chartDataRange = table.getDataBodyRange();
+    const chart = sheet.charts.add(chartType, chartDataRange, Excel.ChartSeriesBy.auto);
+    
+    chart.setPosition("A" + (data.length + 2), "H" + (data.length + 20));
+    
+    chart.title.text = "Data Visualization";
+    
+    chart.legend.position = Excel.ChartLegendPosition.right;
+    chart.dataLabels.format.font.size = 10;
+    chart.dataLabels.format.font.color = "black";
+  }
+  
+  await context.sync();
 }
 
 
