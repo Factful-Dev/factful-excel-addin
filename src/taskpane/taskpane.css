@@ -85,3 +85,7 @@ ul {
 b {
     font-weight: bold;
 }
+
+.ms-font-xl, .ms-font-sm {
+    color: black;
+}

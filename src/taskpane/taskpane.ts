@@ -17,7 +17,7 @@ Office.onReady((info) => {
 export async function webscrape() {
   try {
     await Excel.run(async (context) => {
-      /*
+      
       const sheet = context.workbook.worksheets.getActiveWorksheet();
       
       const data = [
@@ -46,7 +46,7 @@ export async function webscrape() {
       table.getRange().format.autofitRows();
 
       await context.sync();
-      */
+      
     });
   } catch (error) {
     console.error(error);
@@ -101,8 +101,8 @@ export async function convertToExcel() {
               if (apiResponse.ok) {
                 const responseData = await apiResponse.json();
                 
-                if (responseData.data && Array.isArray(responseData.data)) {
-                  await insertDataAndCreateChart(context, responseData.data);
+                if (responseData.data) {
+                  await processTablesAndInsert(context, responseData.data);
                   displayMessage("PDF converted successfully and data inserted into Excel!");
                 } else {
                   displayMessage("Failed to extract structured data from the PDF");
@@ -131,68 +131,62 @@ export async function convertToExcel() {
   }
 }
 
-function convertToTabularData(data: any): any[][] {
-  if (Array.isArray(data)) {
-    if (Array.isArray(data[0])) {
-      return data;
-    } else if (typeof data[0] === 'object') {
-      const headers = Object.keys(data[0]);
-      const result = [headers];
-      
-      data.forEach(item => {
-        const row = headers.map(header => item[header] || '');
-        result.push(row);
-      });
-      
-      return result;
+async function processTablesAndInsert(context: Excel.RequestContext, data: any) {
+  try {
+
+    const sheet = context.workbook.worksheets.getActiveWorksheet();
+    
+    const formattedData = Array.isArray(data) ? data : [];
+    
+    if (formattedData.length === 0) {
+      displayMessage("No data found in the API response");
+      return;
     }
-  } else if (typeof data === 'object') {
-    const result = [['Key', 'Value']];
+
+    const range = sheet.getRange("A1").getResizedRange(formattedData.length - 1, formattedData[0].length - 1);
+    range.values = formattedData;
     
-    Object.entries(data).forEach(([key, value]) => {
-      result.push([key, String(value)]);
-    });
+    const table = sheet.tables.add(range, true);
+    table.name = "DataTable";
     
-    return result;
+    table.getHeaderRowRange().format.fill.color = "#4472C4";
+    table.getHeaderRowRange().format.font.color = "white";
+    table.getHeaderRowRange().format.font.bold = true;
+    
+    range.format.autofitColumns();
+    range.format.autofitRows();
+
+    await tryCreateChart(sheet, formattedData);
+    
+    displayMessage("Data successfully inserted into Excel!");
+    
+    await context.sync();
+  } catch (error) {
+    console.error("Error processing data:", error);
+    displayMessage(`Error processing data: ${error.message}`);
   }
-  
-  return [];
 }
 
-async function insertDataAndCreateChart(context: Excel.RequestContext, data: any[][]) {
-  const sheet = context.workbook.worksheets.getActiveWorksheet();
+async function tryCreateChart(sheet: Excel.Worksheet, data: any[][]) {
+  try {
+    if (data.length <= 1) {
+      return; 
+    }
 
-  sheet.getUsedRange()?.clear();
-  
-  const range = sheet.getRange("A1").getResizedRange(data.length - 1, data[0].length - 1);
-  range.values = data;
-  
-  const table = sheet.tables.add(range, true);
-  table.name = "ExtractedDataTable";
-  
-
-  table.getHeaderRowRange().format.fill.color = "#4472C4";
-  table.getHeaderRowRange().format.font.color = "white";
-  table.getHeaderRowRange().format.font.bold = true;
-  
-  range.format.autofitColumns();
-  range.format.autofitRows();
-
-  let canCreateChart = false;
-  let numericColumns = [];
-  
-  if (data.length > 1) {
+    const numericColumns = [];
+    
     for (let colIndex = 0; colIndex < data[0].length; colIndex++) {
       let isNumeric = true;
-      
+      let numericCount = 0;
+
       for (let rowIndex = 1; rowIndex < data.length; rowIndex++) {
         const cellValue = data[rowIndex][colIndex];
-        
-        if (isNaN(Number(cellValue)) || cellValue === '' || cellValue === null) {
-          isNumeric = false;
-          break;
+
+        if (cellValue !== "" && !isNaN(Number(cellValue))) {
+          numericCount++;
         }
       }
+      isNumeric = numericCount >= (data.length - 1) * 0.7;
       
       if (isNumeric) {
         numericColumns.push(colIndex);
@@ -200,32 +194,38 @@ async function insertDataAndCreateChart(context: Excel.RequestContext, data: any
     }
   
     if (numericColumns.length > 0) {
-      canCreateChart = true;
-    }
-  }
+      let categoryColumn = -1;
+      for (let colIndex = 0; colIndex < data[0].length; colIndex++) {
+        if (!numericColumns.includes(colIndex)) {
+          categoryColumn = colIndex;
+          break;
+        }
+      }
+      
+      if (categoryColumn === -1) {
+        categoryColumn = 0;
+      }
 
-  if (canCreateChart) {
-    let chartType: Excel.ChartType;
-    
-    if (numericColumns.length === 1) {
-      chartType = Excel.ChartType.columnClustered;
-    } else {
-      chartType = Excel.ChartType.line;
+      const chartBodyRange = sheet.getRange("A2").getResizedRange(data.length - 2, data[0].length - 1);
+
+      let chartType: Excel.ChartType;
+      if (numericColumns.length === 1) {
+        chartType = Excel.ChartType.columnClustered;
+      } else {
+        chartType = Excel.ChartType.line;
+      }
+      
+      const chart = sheet.charts.add(chartType, chartBodyRange, Excel.ChartSeriesBy.auto);
+
+      chart.setPosition("A" + (data.length + 2), "H" + (data.length + 20));
+      
+      chart.title.text = "Data Visualization";
+      chart.legend.position = Excel.ChartLegendPosition.right;
+      chart.axes.categoryAxis.title.text = data[0][categoryColumn];
     }
-  
-    const chartDataRange = table.getDataBodyRange();
-    const chart = sheet.charts.add(chartType, chartDataRange, Excel.ChartSeriesBy.auto);
-    
-    chart.setPosition("A" + (data.length + 2), "H" + (data.length + 20));
-    
-    chart.title.text = "Data Visualization";
-    
-    chart.legend.position = Excel.ChartLegendPosition.right;
-    chart.dataLabels.format.font.size = 10;
-    chart.dataLabels.format.font.color = "black";
+  } catch (error) {
+    console.error("Error creating chart:", error);
   }
-  
-  await context.sync();
 }
 
 
